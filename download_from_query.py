@@ -164,31 +164,64 @@ async def search_download_sample(keyword: str, output_filename: str = "downloade
         finally:
             await browser.close()
 
+def parse_rank_range(rank_str: str) -> list[int]:
+    """
+    '0-3' や '0,2,4' や '1' などの文字列を [0, 1, 2, 3] のような整数のリストに変換する
+    """
+    ranks:set[int] = {0}
+    for part in rank_str.split(','):
+        part = part.strip()
+        if '-' in part:
+            start, end = part.split('-', 1)
+            ranks.update(range(int(start), int(end) + 1))
+        else:
+            ranks.add(int(part))
+    return sorted(list(ranks))
+
 
 if __name__ == "__main__":
-    query = ""
-    rank = 0
-    output_filename = "downloaded.mp3"
-
-    parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>=0)] [output_filename]")
-    parser.add_argument("-q","--query", help="検索クエリ (例: 'piano', 'drums', 'ambient')")
-    parser.add_argument("-r","--rank", type=int, help="検索結果順位 0始まり", default=0)
-    parser.add_argument("-o","--out", help="出力ファイル")
-    parser.add_argument("-b","--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+    parser = argparse.ArgumentParser(
+        description="Sample Focus MP3 Downloader",
+        usage="python download_from_query.py -q <search_query> [-r <rank>] [-o <output_filename>]"
+    )
+    parser.add_argument("-q", "--query", help="検索クエリ (例: 'piano', 'drums')")
+    parser.add_argument("-r", "--rank", help="検索結果順位 (例: '0', '0-3', '0,2,5')", default="0")
+    parser.add_argument("-o", "--out", help="出力ファイル名 (複数の場合は番号が付与されます)")
+    parser.add_argument("-b", "--browser", action="store_true", help="ブラウザを表示して実行")
 
     args = parser.parse_args()
-    if args.query:
-        query = args.query
-    if args.rank:
-        rank = args.rank
-    if args.out:
-        output_filename = args.out
-    if len(query)==0:
+
+    if not args.query:
         parser.print_help()
         logging.error("❌ 検索クエリが指定されていません。終了します。")
         sys.exit(1)
-    if rank < 0:
-        logging.error("❌ 検索結果順位は0以上で指定してください。終了します。")
+
+    try:
+        rank_list = parse_rank_range(args.rank)
+    except ValueError:
+        logging.error("❌ --rank の指定形式が不正です。(例: '0', '0-3', '0,2,4')")
         sys.exit(1)
-    logging.info(f"🔍 検索クエリ: {query}, 順位: {rank}, 出力ファイル: {output_filename}")
-    asyncio.run(search_download_sample(query, output_filename, rank,show_browser=args.browser))
+
+    if any(r < 0 for r in rank_list):
+        logging.error("❌ 検索結果順位は0以上で指定してください。")
+        sys.exit(1)
+
+    logging.info(f"🔍 検索クエリ: {args.query}, 対象順位: {rank_list}")
+
+    # 複数ダウンロード時のファイル名制御
+    for r in rank_list:
+        if args.out:
+            if len(rank_list) > 1:
+                # 複数取得時は filename_0.mp3 のように連番を付与
+                name_parts = args.out.rsplit('.', 1)
+                if len(name_parts) == 2:
+                    out_name = f"{name_parts[0]}_{r}.{name_parts[1]}"
+                else:
+                    out_name = f"{args.out}_{r}"
+            else:
+                out_name = args.out
+        else:
+            out_name = f"{args.query}_rank{r}.mp3"
+
+        logging.info(f"\n--- 順位 {r} のダウンロードを開始 ---")
+        asyncio.run(search_download_sample(args.query, out_name, r, show_browser=args.browser))
