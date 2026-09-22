@@ -18,7 +18,7 @@ def fetch_sample_metadata_with_playwright(url:str, show_browser: bool = False ) 
     captured_audio_url = ""
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=(not show_browser), args=["--no-sandbox"])
+        browser = p.chromium.launch(headless=(not show_browser), args=["--no-sandbox","--disable-setuid-sandbox","--disable-blink-features=AutomationControlled","--disable-dev-shm-usage"])
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         )
