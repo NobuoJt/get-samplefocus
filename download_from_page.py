@@ -173,8 +173,8 @@ def confirm_and_download(metadata: dict[str, str], save_path: str | None = None)
     
     if answer in ['y', 'yes']:
         if not save_path:
-            clean_title = re.sub(r'[\\/*?:"<>|]', "", metadata['title'])
-            save_path = f"{clean_title}.mp3"
+            clean_meta = re.sub(r'[\\/*?:"<>|]', "", f"{metadata['title']} - {metadata['author']} - ({metadata['bpm']}, {metadata['key']}, {metadata['duration']})")
+            save_path = f"{clean_meta}.mp3"
 
         logging.info(f"⬇️  ダウンロード中: {save_path} ...")
         
@@ -201,7 +201,7 @@ def confirm_and_download(metadata: dict[str, str], save_path: str | None = None)
 def main():
     parser = argparse.ArgumentParser(description="Sample FocusのURLから音声ファイルをダウンロードします。")
     parser.add_argument("url", nargs="?", help="Sample FocusのURL")
-    parser.add_argument("--out", help="保存するファイル名（省略時はタイトル名を使用）")
+    parser.add_argument("--out", help="保存するファイル名（省略時はメタデータを使用）")
     parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
 
     args = parser.parse_args()
