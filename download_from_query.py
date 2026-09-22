@@ -54,7 +54,7 @@ async def download_mp3_from_search_page(
 
     try:
         logging.info("⏳ 再生ボタンの表示を待機中...")
-        play_btn = page.locator(play_button_selector).nth(rank)
+        play_btn = page.locator(play_button_selector).nth(rank*2) #偶数ボタンはログイン求められるので奇数に
         await play_btn.wait_for(state="attached", timeout=10000)
         await play_btn.wait_for(state="visible", timeout=10000)
 
@@ -167,12 +167,12 @@ async def search_download_sample(keyword: str, output_filename: str = "downloade
 
 if __name__ == "__main__":
     query = ""
-    rank = 1
+    rank = 0
     output_filename = "downloaded.mp3"
 
-    parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>0)] [output_filename]")
-    parser.add_argument("--query", help="検索クエリ")
-    parser.add_argument("--rank", type=int, help="検索結果順位")
+    parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>=0)] [output_filename]")
+    parser.add_argument("--query", help="検索クエリ (例: 'piano', 'drums', 'ambient')")
+    parser.add_argument("--rank", type=int, help="検索結果順位 0始まり", default=0)
     parser.add_argument("--out", help="出力ファイル")
     parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
 
@@ -187,5 +187,8 @@ if __name__ == "__main__":
         parser.print_help()
         logging.error("❌ 検索クエリが指定されていません。終了します。")
         sys.exit(1)
-
+    if rank < 0:
+        logging.error("❌ 検索結果順位は0以上で指定してください。終了します。")
+        sys.exit(1)
+    logging.info(f"🔍 検索クエリ: {query}, 順位: {rank}, 出力ファイル: {output_filename}")
     asyncio.run(search_download_sample(query, output_filename, rank,show_browser=args.browser))
