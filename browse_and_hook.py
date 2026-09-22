@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import sys
 from urllib.parse import unquote
 import httpx
 from camoufox.async_api import AsyncCamoufox
@@ -8,10 +9,32 @@ from playwright.async_api import Response
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s]: %(message)s', datefmt='%H:%M:%S')
 
+# ★ 自動ダウンロードのON/OFFフラグ（グローバル）
+auto_download_enabled = True
+
+async def toggle_listener():
+    """ターミナルからの入力（Enter）を監視してトグルするタスク"""
+    global auto_download_enabled
+    print("\n" + "=" * 50)
+    print(" 💡 [Enter] キーを押すと自動ダウンロードの ON / OFF を切り替えられます")
+    print("=" * 50 + "\n")
+    
+    loop = asyncio.get_event_loop()
+    while True:
+        # 非同期で標準入力を待機
+        await loop.run_in_executor(None, sys.stdin.readline)
+        auto_download_enabled = not auto_download_enabled
+        
+        status_str = "🟢 [ON] 自動ダウンロード有効" if auto_download_enabled else "🔴 [OFF] 自動ダウンロード停止中 (フックのみ)"
+        print(f"\n>>> 設定変更: {status_str}\n")
+
 async def main():
     # Camoufox を非Headless（画面表示あり）で起動
     async with AsyncCamoufox(headless=False) as browser:
         page = await browser.new_page()
+
+        # 入力監視タスクをバックグラウンドで開始
+        asyncio.create_task(toggle_listener())
 
         # レスポンスのフック処理
         async def handle_response(response: Response):
@@ -23,6 +46,10 @@ async def main():
                   return
 
               logging.info(f"🎧 MP3の通信を検知: {url}")
+
+              if not auto_download_enabled:
+                    logging.info("⏸️  (自動ダウンロードが OFF のため保存をスキップしました)")
+                    return
 
               title = "Unknown"
               author = "Unknown"
