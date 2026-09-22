@@ -1,23 +1,31 @@
+"use strict"
 import asyncio
 import re
 import sys
 from urllib.parse import quote
 import httpx
-from playwright.async_api import async_playwright
+from playwright.async_api import (
+    async_playwright,
+    Request,
+    Page,
+)
+from playwright.async_api._generated import (
+    Page
+)
+import argparse
 
 BASE_URL = "https://samplefocus.com"
 
-
-async def download_mp3_from_search(
-    page, search_query: str
+async def download_mp3_from_search_page(
+    page:Page, search_query: str, rank: int = 0
 ) -> str | None:
     """検索ページ上で直接再生ボタンを押し、MP3 URLを横取りする"""
     mp3_url = None
 
     # 1. バックグラウンド通信を監視し、CloudFront等の .mp3 リクエストをキャプチャ
-    def handle_request(request):
+    def handle_request(request: Request):
         nonlocal mp3_url
-        url = request.url
+        url: str = request.url
         if ".mp3" in url:
             mp3_url = url
             print(f"⚡ MP3 リクエストをキャプチャ: {mp3_url}")
@@ -42,8 +50,9 @@ async def download_mp3_from_search(
     play_button_selector = "#samples .sf-card-action .card-action-button"
 
     try:
-        print("⏳ 一覧上の再生ボタンの表示を待機中...")
-        play_btn = page.locator(play_button_selector).first
+        print("⏳ 再生ボタンの表示を待機中...")
+        play_btn = page.locator(play_button_selector).nth(rank)
+        await play_btn.wait_for(state="attached", timeout=10000)
         await play_btn.wait_for(state="visible", timeout=10000)
 
         print(
@@ -95,7 +104,8 @@ def verify_and_save_mp3(data: bytes, output_path: str) -> bool:
     return True
 
 
-async def download_sample(keyword: str, output_filename: str = "downloaded.mp3"):
+
+async def search_download_sample(keyword: str, output_filename: str = "downloaded.mp3", rank: int = 0):
     async with async_playwright() as p:
         # Cloudflare対策: Headless Chrome でも各種プロパティを本物のブラウザに偽装
         browser = await p.chromium.launch(
@@ -114,7 +124,7 @@ async def download_sample(keyword: str, output_filename: str = "downloaded.mp3")
 
         try:
             # 検索ページ上で直接 MP3 URL を取得
-            mp3_url = await download_mp3_from_search(page, keyword)
+            mp3_url = await download_mp3_from_search_page(page, keyword,rank)
 
             if not mp3_url:
                 print("❌ MP3 リソースの URL を取得できませんでした。")
@@ -147,8 +157,24 @@ async def download_sample(keyword: str, output_filename: str = "downloaded.mp3")
 
 
 if __name__ == "__main__":
-    query = "welcome to my world"
-    if len(sys.argv) > 1:
-        query = sys.argv[1]
+    query = ""
+    rank = 1
+    output_filename = "downloaded.mp3"
 
-    asyncio.run(download_sample(query, "welcome_to_my_world.mp3"))
+    parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>0)] [output_filename]")
+    parser.add_argument("--query", help="Search query")
+    parser.add_argument("--rank", type=int, help="Rank of the search result")
+    parser.add_argument("--out", help="Output filename")
+    args = parser.parse_args()
+    if args.query:
+        query = args.query
+    if args.rank:
+        rank = args.rank
+    if args.out:
+        output_filename = args.out
+    if len(query)==0:
+        parser.print_help()
+        print("❌ 検索クエリが指定されていません。終了します。")
+        sys.exit(1)
+
+    asyncio.run(search_download_sample(query, output_filename, rank))

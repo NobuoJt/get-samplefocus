@@ -1,15 +1,18 @@
+"use strict"
 import sys
-import json
 import re
 import requests
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+from bs4 import (BeautifulSoup)
+from playwright.sync_api import (
+    sync_playwright,
+    Request,
+    )
 
-def fetch_sample_metadata_with_playwright(url):
+def fetch_sample_metadata_with_playwright(url:str):
     """
     Playwrightでページを読み込み、再生ボタンをピンポイントでクリックしてMP3通信をキャッチする
     """
-    captured_audio_url = None
+    captured_audio_url = ""
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -19,7 +22,7 @@ def fetch_sample_metadata_with_playwright(url):
         page = context.new_page()
 
         # ネットワークリクエストの監視 (.mp3 を含む URL のみを正確にフィルタリング)
-        def handle_request(request):
+        def handle_request(request: Request):
             nonlocal captured_audio_url
             req_url = request.url
             # 画像 (png, jpg, webp) や波形画像(waveform)を除外し、.mp3 または cloudfront の音声パスをキャッチ
@@ -76,7 +79,8 @@ def fetch_sample_metadata_with_playwright(url):
     author = 'Unknown'
     h5_elem = soup.find('h5')
     if h5_elem and h5_elem.find('a'):
-        author = h5_elem.find('a').get_text(strip=True)
+        tg=h5_elem.find('a')
+        author = tg.get_text(strip=True) if tg else h5_elem.get_text(strip=True)
 
     # 3. ul.sample-attrs から各スペック情報（BPM, Key, Duration）の抽出
     bpm = 'N/A'
@@ -112,7 +116,7 @@ def fetch_sample_metadata_with_playwright(url):
 
     return metadata
 
-def verify_and_save_audio(response, save_path):
+def verify_and_save_audio(response: requests.Response, save_path: str) -> bool:
     """
     ダウンロードしたコンテンツの検証（Content-Typeおよびファイルヘッダー/Magic Numberの確認）
     """
@@ -140,7 +144,7 @@ def verify_and_save_audio(response, save_path):
     print(f"✅ 検証完了: 正しい音声ファイルとして保存されました ({save_path})")
     return True
 
-def confirm_and_download(metadata, save_path=None):
+def confirm_and_download(metadata: dict[str, str], save_path: str | None = None):
     """
     メタデータをターミナルに表示し、ダウンロード前の確認を行う
     """
