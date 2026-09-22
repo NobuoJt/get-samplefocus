@@ -4,6 +4,7 @@ import re
 import sys
 from urllib.parse import quote
 import httpx
+import logging
 from playwright.async_api import (
     async_playwright,
     Request,
@@ -13,6 +14,8 @@ from playwright.async_api._generated import (
     Page
 )
 import argparse
+
+logging.basicConfig(level=logging.INFO,format='%(asctime)s [%(levelname)s]: %(message)s',datefmt ='%H:%M:%S')
 
 BASE_URL = "https://samplefocus.com"
 
@@ -28,13 +31,13 @@ async def download_mp3_from_search_page(
         url: str = request.url
         if ".mp3" in url:
             mp3_url = url
-            print(f"⚡ MP3 リクエストをキャプチャ: {mp3_url}")
+            logging.info(f"MP3 Request Captured: {mp3_url}")
 
     page.on("request", handle_request)
 
     encoded_query = quote(search_query)
     search_url = f"{BASE_URL}/samples?search={encoded_query}"
-    print(f"🔍 検索ページにアクセス中: {search_url}")
+    logging.info(f"🔍 検索ページURL: {search_url}")
 
     # 検索ページへ移動
     await page.goto(search_url, wait_until="domcontentloaded")
@@ -43,19 +46,19 @@ async def download_mp3_from_search_page(
     try:
         await page.wait_for_selector("#samples", timeout=10000)
     except Exception:
-        print("⚠️ #samples の表示待機タイムアウト。続行します...")
+        logging.warning("⚠️ #samples の表示待機タイムアウト。続行します...")
 
     # 3. 最初のサンプルの再生ボタンセレクターを特定してクリック
     # 解析いただいた要素: .sf-card-action .card-action-button
     play_button_selector = "#samples .sf-card-action .card-action-button"
 
     try:
-        print("⏳ 再生ボタンの表示を待機中...")
+        logging.info("⏳ 再生ボタンの表示を待機中...")
         play_btn = page.locator(play_button_selector).nth(rank)
         await play_btn.wait_for(state="attached", timeout=10000)
         await play_btn.wait_for(state="visible", timeout=10000)
 
-        print(
+        logging.info(
             "▶️ 検索結果上で再生ボタンをクリック（詳細ページへ行かずに通信を発火）..."
         )
         await play_btn.click()
@@ -65,13 +68,14 @@ async def download_mp3_from_search_page(
             if mp3_url:
                 break
             await page.wait_for_timeout(500)
+        logging.info("⏳ MP3通信を待機中...")
 
     except Exception as e:
-        print(f"⚠️ 検索結果上での再生ボタンクリック失敗: {e}")
+        logging.error(f"⚠️ 検索結果上での再生ボタンクリック失敗: {e}")
 
     # 4. リクエストから拾えなかった場合、ページ内のHTML/スクリプトからMP3直リンクを正規表現で探す
     if not mp3_url:
-        print("👀 ページのHTML/スクリプト内から MP3 URL を探索中...")
+        logging.info("👀 ページのHTML/スクリプト内から MP3 URL を探索中...")
         content = await page.content()
         match = re.search(r'https?://[^\s\'"]+\.mp3[^\s\'"]*', content)
         if match:
@@ -83,33 +87,36 @@ async def download_mp3_from_search_page(
 def verify_and_save_mp3(data: bytes, output_path: str) -> bool:
     """バイナリの冒頭ヘッダーを確認して MP3 として保存する"""
     if len(data) < 3:
-        print("❌ エラー: 受信データが短すぎます。")
+        logging.error("❌ エラー: 受信データが短すぎます。")
         return False
 
     header_bytes = data[:3]
     hex_str = " ".join([f"{b:02X}" for b in header_bytes])
 
-    print(f"🔬 バイナリ冒頭 (Hex): {hex_str}")
+    logging.info(f"🔬 バイナリ冒頭 (Hex): {hex_str}")
 
     # 0x49 0x44 0x33 (ID3) の検証
     if header_bytes == b"ID3":
-        print("✅ ID3 ヘッダーを確認しました (MP3ファイル)")
+        logging.info("✅ ID3 ヘッダーを確認しました (MP3ファイル)")
     else:
-        print("⚠️ ID3 ヘッダーではありませんが、ファイルを保存します。")
+        logging.warning("⚠️ ID3 ヘッダーではありませんが、ファイルを保存します。")
 
     with open(output_path, "wb") as f:
         f.write(data)
 
-    print(f"💾 ファイルを保存しました: {output_path}")
+    logging.info(f"💾 ファイルを保存しました: {output_path}")
     return True
 
 
 
-async def search_download_sample(keyword: str, output_filename: str = "downloaded.mp3", rank: int = 0):
+async def search_download_sample(keyword: str, output_filename: str = "downloaded.mp3", rank: int = 0, show_browser: bool = False):
+    """
+    指定されたキーワードで検索し、該当するサンプルをダウンロードする。
+    """
     async with async_playwright() as p:
         # Cloudflare対策: Headless Chrome でも各種プロパティを本物のブラウザに偽装
         browser = await p.chromium.launch(
-            headless=True,
+            headless=(not show_browser),
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -125,12 +132,13 @@ async def search_download_sample(keyword: str, output_filename: str = "downloade
         try:
             # 検索ページ上で直接 MP3 URL を取得
             mp3_url = await download_mp3_from_search_page(page, keyword,rank)
+            logging.info(f"MP3 URL: {mp3_url}")
 
             if not mp3_url:
-                print("❌ MP3 リソースの URL を取得できませんでした。")
+                logging.error("❌ MP3 リソースの URL を取得できませんでした。")
                 return
 
-            print(f"🎵 検出された MP3 URL: {mp3_url}")
+            logging.info(f"🎵 検出された MP3 URL: {mp3_url}")
 
             # 取得した MP3 URL をダウンロード (Referer を設定)
             async with httpx.AsyncClient() as client:
@@ -146,12 +154,13 @@ async def search_download_sample(keyword: str, output_filename: str = "downloade
                 if response.status_code == 200:
                     verify_and_save_mp3(response.content, output_filename)
                 else:
-                    print(
+                    logging.error(
                         f"❌ ダウンロード失敗: HTTP ステータス {response.status_code}"
                     )
+                    logging.error(f"❌ ダウンロード失敗: {response.status_code}")
 
         except Exception as e:
-            print(f"⚠️ エラーが発生しました: {e}")
+            logging.error(f"⚠️ エラーが発生しました: {e}")
         finally:
             await browser.close()
 
@@ -162,9 +171,11 @@ if __name__ == "__main__":
     output_filename = "downloaded.mp3"
 
     parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>0)] [output_filename]")
-    parser.add_argument("--query", help="Search query")
-    parser.add_argument("--rank", type=int, help="Rank of the search result")
-    parser.add_argument("--out", help="Output filename")
+    parser.add_argument("--query", help="検索クエリ")
+    parser.add_argument("--rank", type=int, help="検索結果順位")
+    parser.add_argument("--out", help="出力ファイル")
+    parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+
     args = parser.parse_args()
     if args.query:
         query = args.query
@@ -174,7 +185,7 @@ if __name__ == "__main__":
         output_filename = args.out
     if len(query)==0:
         parser.print_help()
-        print("❌ 検索クエリが指定されていません。終了します。")
+        logging.error("❌ 検索クエリが指定されていません。終了します。")
         sys.exit(1)
 
-    asyncio.run(search_download_sample(query, output_filename, rank))
+    asyncio.run(search_download_sample(query, output_filename, rank,show_browser=args.browser))

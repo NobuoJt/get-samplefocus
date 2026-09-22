@@ -1,21 +1,24 @@
 "use strict"
-import sys
 import re
 import requests
+import logging
 from bs4 import (BeautifulSoup)
 from playwright.sync_api import (
     sync_playwright,
     Request,
     )
+import argparse
 
-def fetch_sample_metadata_with_playwright(url:str):
+logging.basicConfig(level=logging.INFO,format='%(asctime)s [%(levelname)s]: %(message)s',datefmt ='%H:%M:%S')
+
+def fetch_sample_metadata_with_playwright(url:str, show_browser: bool = False ) -> dict[str, str]:
     """
     Playwrightでページを読み込み、再生ボタンをピンポイントでクリックしてMP3通信をキャッチする
     """
     captured_audio_url = ""
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=(not show_browser), args=["--no-sandbox"])
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         )
@@ -47,7 +50,7 @@ def fetch_sample_metadata_with_playwright(url:str):
                 play_btn = page.query_selector('button[aria-label*="Play"], button[aria-label*="play"]')
 
             if play_btn:
-                print("▶️  再生ボタンを検出しました。クリックを実行します...")
+                logging.info("▶️  再生ボタンを検出しました。クリックを実行します...")
                 # ボタンクリックと同時に MP3 の通信レスポンスを待機
                 try:
                     with page.expect_response(
@@ -59,12 +62,12 @@ def fetch_sample_metadata_with_playwright(url:str):
                     # タイムアウトした場合も一応数秒待機してキャッチを試みる
                     page.wait_for_timeout(2000)
             else:
-                print("⚠️ 再生ボタンが見つかりませんでした。")
+                logging.error("⚠️ 再生ボタンが見つかりませんでした。")
 
             html_content = page.content()
 
         except Exception as e:
-            print(f"⚠️  ページの読み込み/クリック待機中にエラー: {e}")
+            logging.error(f"⚠️  ページの読み込み/クリック待機中にエラー: {e}")
             html_content = page.content()
         finally:
             browser.close()
@@ -123,57 +126,57 @@ def verify_and_save_audio(response: requests.Response, save_path: str) -> bool:
     content_type = response.headers.get('Content-Type', '')
     content = response.content
 
-    print(f"🔍 コンテンツ検証中...")
-    print(f"   - HTTP Content-Type: {content_type}")
-    print(f"   - データサイズ: {len(content)} bytes")
+    logging.info(f"🔍 コンテンツ検証中...")
+    logging.info(f"   - HTTP Content-Type: {content_type}")
+    logging.info(f"   - データサイズ: {len(content)} bytes")
 
     # Magic Number（バイナリ先頭バイト）による検証
-    is_png = content.startswith(b'\x89PNG\r\n\x1a\n')
+    is_png = content.startswith(b'\x89PNG\r\x1a')
     is_mp3 = content.startswith(b'ID3') or content.startswith(b'\xff\xfb') or content.startswith(b'\xff\xf3') or content.startswith(b'\xff\xf2')
 
     if is_png or 'image/png' in content_type:
-        print("❌ エラー: 取得されたファイルは PNG 画像です。音声ファイルのダウンロードに失敗しました。")
+        logging.error("❌ エラー: 取得されたファイルは PNG 画像です。音声ファイルのダウンロードに失敗しました。")
         return False
     
     if not is_mp3 and 'audio' not in content_type:
-        print("⚠️  警告: MP3の標準シグネチャが確認できませんでしたが、保存を試みます。")
+        logging.warning("⚠️  警告: MP3の標準シグネチャが確認できませんでしたが、保存を試みます。")
 
     with open(save_path, 'wb') as f:
         f.write(content)
 
-    print(f"✅ 検証完了: 正しい音声ファイルとして保存されました ({save_path})")
+    logging.info(f"✅ 検証完了: 正しい音声ファイルとして保存されました ({save_path})")
     return True
 
 def confirm_and_download(metadata: dict[str, str], save_path: str | None = None):
     """
     メタデータをターミナルに表示し、ダウンロード前の確認を行う
     """
-    print("\n" + "=" * 45)
-    print(" 🎵 サンプル メタデータ確認")
-    print("=" * 45)
-    print(f" タイトル   : {metadata['title']}")
-    print(f" 作者       : {metadata['author']}")
-    print(f" BPM        : {metadata['bpm']}")
-    print(f" キー       : {metadata['key']}")
-    print(f" 長さ       : {metadata['duration']}")
-    print(f" タグ/タイプ : {metadata['type']}")
-    print("=" * 45 + "\n")
+    logging.info("" + "=" * 45)
+    logging.info(" 🎵 サンプル メタデータ確認")
+    logging.info("=" * 45)
+    logging.info(f" タイトル   : {metadata['title']}")
+    logging.info(f" 作者       : {metadata['author']}")
+    logging.info(f" BPM        : {metadata['bpm']}")
+    logging.info(f" キー       : {metadata['key']}")
+    logging.info(f" 長さ       : {metadata['duration']}")
+    logging.info(f" タグ/タイプ : {metadata['type']}")
+    logging.info("=" * 45 + "")
 
     if not metadata['audio_url']:
-        print("⚠️  音声ファイルのURLが抽出できませんでした。")
+        logging.warning("⚠️  音声ファイルのURLが抽出できませんでした。")
         return
 
-    print(f"🔗 抽出URL: {metadata['audio_url']}")
+    logging.info(f"🔗 抽出URL: {metadata['audio_url']}")
 
     # ダウンロード前確認プロンプト
-    answer = input("\nこのサンプルをダウンロードしますか？ [y/N]: ").strip().lower()
+    answer = input("このサンプルをダウンロードしますか？ [y/N]: ").strip().lower()
     
     if answer in ['y', 'yes']:
         if not save_path:
             clean_title = re.sub(r'[\\/*?:"<>|]', "", metadata['title'])
             save_path = f"{clean_title}.mp3"
 
-        print(f"\n⬇️  ダウンロード中: {save_path} ...")
+        logging.info(f"⬇️  ダウンロード中: {save_path} ...")
         
         headers = {
             'accept': '*/*',
@@ -191,25 +194,40 @@ def confirm_and_download(metadata: dict[str, str], save_path: str | None = None)
             verify_and_save_audio(res, save_path)
 
         except requests.RequestException as e:
-            print(f"❌ ダウンロードに失敗しました: {e}")
+            logging.error(f"❌ ダウンロードに失敗しました: {e}")
     else:
-        print("🚫 ダウンロードをキャンセルしました。")
+        logging.warning("🚫 ダウンロードをキャンセルしました。")
 
 def main():
-    if len(sys.argv) > 1:
-        target_url = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Sample FocusのURLから音声ファイルをダウンロードします。")
+    parser.add_argument("url", nargs="?", help="Sample FocusのURL")
+    parser.add_argument("--out", help="保存するファイル名（省略時はタイトル名を使用）")
+    parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+
+    args = parser.parse_args()
+
+    if args.url:
+        target_url = args.url
     else:
         target_url = input("Sample FocusのURLを入力してください: ").strip()
 
     if not target_url:
-        print("URLが入力されていません。終了します。")
+        logging.error("URLが入力されていません。終了します。")
         return
+    
+    if args.out:
+        save_path = args.out
+    else:
+        save_path = None
+    
+    if args.browser:
+        logging.warning("⚠️  ブラウザを表示して実行します。")
 
-    print("\n🔍 Playwrightでページをレンダリングしてメタデータを取得中...")
-    metadata = fetch_sample_metadata_with_playwright(target_url)
+    logging.info("🔍 Playwrightでページをレンダリングしてメタデータを取得中...")
+    metadata = fetch_sample_metadata_with_playwright(target_url, show_browser=args.browser)
 
     if metadata:
-        confirm_and_download(metadata)
+        confirm_and_download(metadata, save_path)
 
 if __name__ == "__main__":
     main()
