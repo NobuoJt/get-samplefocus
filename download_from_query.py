@@ -171,10 +171,10 @@ if __name__ == "__main__":
     output_filename = "downloaded.mp3"
 
     parser = argparse.ArgumentParser(description="Sample Focus MP3 Downloader",usage="python download_from_query.py.py <search_query> [rank (>=0)] [output_filename]")
-    parser.add_argument("--query", help="検索クエリ (例: 'piano', 'drums', 'ambient')")
-    parser.add_argument("--rank", type=int, help="検索結果順位 0始まり", default=0)
-    parser.add_argument("--out", help="出力ファイル")
-    parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+    parser.add_argument("-q","--query", help="検索クエリ (例: 'piano', 'drums', 'ambient')")
+    parser.add_argument("-r","--rank", type=int, help="検索結果順位 0始まり", default=0)
+    parser.add_argument("-o","--out", help="出力ファイル")
+    parser.add_argument("-b","--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
 
     args = parser.parse_args()
     if args.query:

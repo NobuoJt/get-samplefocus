@@ -200,9 +200,10 @@ def confirm_and_download(metadata: dict[str, str], save_path: str | None = None)
 
 def main():
     parser = argparse.ArgumentParser(description="Sample FocusのURLから音声ファイルをダウンロードします。")
-    parser.add_argument("url", nargs="?", help="Sample FocusのURL")
-    parser.add_argument("--out", help="保存するファイル名（省略時はメタデータを使用）")
-    parser.add_argument("--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+    parser.add_argument("-u","--url", nargs="?", help="Sample FocusのURL")
+    parser.add_argument("-o","--out", help="保存するファイル名（省略時はメタデータを使用）")
+    parser.add_argument("-b","--browser", action="store_true", help="ブラウザを表示して実行（デバッグ用）")
+    parser.add_argument("-y","--yes", action="store_true", help="確認プロンプトをスキップして自動的にダウンロード")
 
     args = parser.parse_args()
 
@@ -213,6 +214,7 @@ def main():
 
     if not target_url:
         logging.error("URLが入力されていません。終了します。")
+        parser.print_help()
         return
     
     if args.out:
