@@ -173,7 +173,7 @@ def confirm_and_download(metadata: dict[str, str], save_path: str | None = None)
     
     if answer in ['y', 'yes']:
         if not save_path:
-            clean_meta = re.sub(r'[\\/*?:"<>|]', "", f"{metadata['title']} - {metadata['author']} - ({metadata['bpm']}, {metadata['key']}, {metadata['duration']})")
+            clean_meta = re.sub(r'[\\/*?:"<>|]', "", f"{metadata['title']} by {metadata['author']} ({metadata['bpm']} {metadata['key']} {metadata['duration']})")
             save_path = f"{clean_meta}.mp3"
 
         logging.info(f"⬇️  ダウンロード中: {save_path} ...")
