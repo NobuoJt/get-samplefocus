@@ -10,6 +10,7 @@
 
   # 依存関係のインストール
   uv pip install -r requirements.txt
+  playwright install
 ```
 
 ## 使い方
