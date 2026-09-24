@@ -2,3 +2,5 @@
 *.zip
 dist
 build
+*.dist/
+*.build/
