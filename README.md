@@ -37,3 +37,11 @@
 ```powershell
   uv python browse_and_hook.py
 ```
+
+## 開発メモ
+
+- Cにコンパイルして配布する場合は、Nuitkaを使用する。
+
+```bash
+Nuitka .\browse_and_hook.py --output-dir=dist
+```
